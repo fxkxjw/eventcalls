@@ -436,6 +436,7 @@ __SYSCALL(__NR_tuxcall, sys_ni_syscall)
 __SYSCALL(__NR_security, sys_ni_syscall)
 */
 
+//eventcalls start
 #define __NR_doeventopen			181
 __SYSCALL(__NR_doeventopen, sys_doeventopen)
 #define __NR_doeventclose			182
@@ -446,7 +447,7 @@ __SYSCALL(__NR_doeventwait, sys_doeventwait)
 __SYSCALL(__NR_doeventsig, sys_doeventsig)
 #define __NR_doeventinfo			185
 __SYSCALL(__NR_doeventinfo, sys_doeventinfo)
-
+//eventcalls end
 
 #define __NR_gettid				186
 __SYSCALL(__NR_gettid, sys_gettid)
@@ -487,8 +488,16 @@ __SYSCALL(__NR_futex, sys_futex)
 __SYSCALL(__NR_sched_setaffinity, sys_sched_setaffinity)
 #define __NR_sched_getaffinity			204
 __SYSCALL(__NR_sched_getaffinity, sys_sched_getaffinity)
+/*
 #define __NR_set_thread_area			205
-__SYSCALL(__NR_set_thread_area, sys_ni_syscall)	/* use arch_prctl */
+__SYSCALL(__NR_set_thread_area, sys_ni_syscall)
+*//* use arch_prctl */
+
+//eventcalls begin
+#define __NR_doeventchown           205
+__SYSCALL(__NR_doeventchown, sys_doeventchown)
+//eventcalls end
+
 #define __NR_io_setup				206
 __SYSCALL(__NR_io_setup, sys_io_setup)
 #define __NR_io_destroy				207
@@ -499,14 +508,31 @@ __SYSCALL(__NR_io_getevents, sys_io_getevents)
 __SYSCALL(__NR_io_submit, sys_io_submit)
 #define __NR_io_cancel				210
 __SYSCALL(__NR_io_cancel, sys_io_cancel)
+/*
 #define __NR_get_thread_area			211
-__SYSCALL(__NR_get_thread_area, sys_ni_syscall)	/* use arch_prctl */
+__SYSCALL(__NR_get_thread_area, sys_ni_syscall)
+*//* use arch_prctl */
+
+//eventcalls begin
+#define __NR_doeventchmod           211
+__SYSCALL(__NR_doeventchmod, sys_doeventchmod)
+//eventcalls end
+
 #define __NR_lookup_dcookie			212
 __SYSCALL(__NR_lookup_dcookie, sys_lookup_dcookie)
 #define __NR_epoll_create			213
 __SYSCALL(__NR_epoll_create, sys_epoll_create)
+
+/*
 #define __NR_epoll_ctl_old			214
 __SYSCALL(__NR_epoll_ctl_old, sys_ni_syscall)
+*/
+
+//eventcalls begin
+#define __NR_doeventstat            214
+__SYSCALL(__NR_doeventstat, sys_doeventstat)
+//eventcalls end
+
 #define __NR_epoll_wait_old			215
 __SYSCALL(__NR_epoll_wait_old, sys_ni_syscall)
 #define __NR_remap_file_pages			216

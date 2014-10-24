@@ -3,12 +3,22 @@
 
 #include <linux/eventcalls.h>
 
+
+
 struct event global_event;
 rwlock_t eventID_list_lock;
 bool event_initialized;
 
-//return the length of the list with given list_head
-int count_event(struct list_head * head)
+
+
+
+
+
+/*
+ * Return the length of the list with given list_head.
+ * Remember to call read_lock before.
+ */
+int get_list_length(struct list_head * head)
 {
     int length = 0;
     struct list_head * pos;
@@ -17,8 +27,16 @@ int count_event(struct list_head * head)
 }
 
 
-//return a pointer to the event with given event ID
-//return NULL if the event with the given event ID is not found 
+
+
+
+
+
+/*
+ * Return a pointer to the event with given event ID.
+ * Return NULL if the event with the given event ID is not found.
+ * Remember to call read_lock before.
+ */
 struct event * get_event(int eventID)
 {
     //iterate global event list
@@ -32,7 +50,16 @@ struct event * get_event(int eventID)
 }
 
 
-//initialize a global event as the head of a linked list of other events
+
+
+
+
+
+
+/*
+ * Initialize a global event as the head of a linked list of other events.
+ * This function should be called in function start_kernel() in linux/init/main.c at kernel boot.
+ */
 void doevent_init()
 {
     eventID_list_lock = RW_LOCK_UNLOCKED;
@@ -46,127 +73,165 @@ void doevent_init()
 }
 
 
-//create a new event
-//create a new event id
-//implement event is list as kernel linked list
-//add the new event id to the linked list
-//return event id on success
-//return -1 on failure
+
+
+
+
+
+/*
+ * Create a new event and assign an event ID to it.
+ * Add the new event to the global event list.
+ * Return event id on success.
+ * Return -1 on failure.
+ */
 asmlinkage long sys_doeventopen()
 {
     struct event * new_event = kmalloc(sizeof(struct event), GFP_KERNEL);
 
-    // initialize event list
-    INIT_LIST_HEAD(&(new_event->eventID_list));
+    INIT_LIST_HEAD(&(new_event->eventID_list)); // Initialize event list entry.
 
-    // add event to the main list
     unsigned long flags;
 
-    write_lock_irqsave(&eventID_list_lock, flags);  //lock write
-   
-    list_add_tail(&(new_event->eventID_list), &global_event.eventID_list);
-    int max_id = list_entry((new_event->eventID_list).prev, struct event, eventID_list)->eventID;
-    new_event->eventID = max_id + 1;
-    init_waitqueue_head(&(new_event->wait_queue));
-    
-    write_unlock_irqrestore(&eventID_list_lock, flags); //unlock write
+
+    write_lock_irqsave(&eventID_list_lock, flags);  // Lock write.
+    list_add_tail(&(new_event->eventID_list), &global_event.eventID_list);  // Add new_event to the tail of event list
+    int max_id = list_entry((new_event->eventID_list).prev, struct event, eventID_list)->eventID; // Find preceding event's ID.
+    new_event->eventID = max_id + 1;    // Assign eventID to new_event. No duplicate!
+    init_waitqueue_head(&(new_event->wait_queue));  // Initialize wait queue.
+    write_unlock_irqrestore(&eventID_list_lock, flags); // Unlock write.
+
 
     return new_event->eventID;
 }
 
 
-//destroy the event with the given event ID
-//signal any process waiting on the event to leave the event
-//return the number of processed signaled on success
-//return -1 on failure
+
+
+
+
+/*
+ * Wake up all tasks in the waiting queue of the event with given eventID.
+ * Remove the event from global event list.
+ * Free memory which hold the event.
+ * Return the number of processed signaled on success.
+ * Return -1 on failure.
+ */
 asmlinkage long sys_doeventclose(int eventID)
 {
-    if (eventID == 0) return -1;
+    if (eventID <= 0) return -1;    //check argument exception
     
     unsigned long flags;
+
+
+
     read_lock_irqsave(&eventID_list_lock, flags);   //lock read
-    
-    struct event * this_event = get_event(eventID);
-    
+    struct event * this_event = get_event(eventID); //search for event in event list
     read_unlock_irqrestore(&eventID_list_lock, flags);  //unlock read
 
-    if (this_event == NULL) return -1;
-
+   
+    
+    if (this_event == NULL) return -1;  //if event not found
+    
+    /*
+     * Wake up all tasks in the waiting queue of the event.
+     * Remove the tasks from the waiting queue.
+     */
     int processes_signaled = sys_doeventsig(eventID);
 
+   
+    
     write_lock_irqsave(&eventID_list_lock, flags);  //lock write
-    list_del(&(this_event->eventID_list));
+    list_del(&(this_event->eventID_list));  //delete event from event list
     write_unlock_irqrestore(&eventID_list_lock, flags); //unlock write
 
-    kfree(this_event);
 
+
+    kfree(this_event);  //remember to free memory
 
     return processes_signaled;
 }
 
 
-//block process until the event is signaled
-//add the calling process to the wait queue for the event with the given event ID
-//return 1 on success
-//return -1 on failure
+
+
+
+
+/*
+ * Make the calling tasks wait in the wait queue of the event with the given eventID.
+ * Rreturn 1 on success.
+ * Return -1 on failure.
+ */
 asmlinkage long sys_doeventwait(int eventID)
 {
-    if (eventID == 0) return -1;
+    if (eventID <= 0) return -1;
 
     unsigned long flags;  
-    read_lock_irqsave(&eventID_list_lock, flags);   //lock read
     
-    struct event * this_event = get_event(eventID);
-    int x = this_event->go_aheads;
     
-    read_unlock_irqrestore(&eventID_list_lock, flags);  //unlock read
 
-    while (x == this_event->go_aheads) {
-        interruptible_sleep_on(&(this_event->wait_queue));
-    }
+    read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
+    struct event * this_event = get_event(eventID); // Search for the event in event list
+    read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
+
+    /*
+     * Wait in queue until wait flag is false.
+     * This function includes adding task to wait queue and removing from queue.
+     * Remember to call wake_up() each time after wait_flag changes to check whether wait flag is false.
+     */
+    wait_event(this_event->wait_queue, this_event->wait_flag == false);
+
 
     return 0;
 }
 
-//unblocks all waiting processes
-//ignoreed if no processes are blocked
-//each event ID will have its own wait queue of processes
-//wake up all processes in that queue
-//return the number of processes signaled on success
-//return -1 on failure
+
+
+
+
+
+/*
+ * Wake up all tasks waiting in the event with the given event ID.
+ * Remove all tasks from waiting queue.
+ * Return the number of processes signaled on success.
+ * Return -1 on failure.
+ */
 asmlinkage long sys_doeventsig(int eventID)
 {
-    if (eventID == 0) return -1;
+    if (eventID <= 0) return -1;    // Check argument exceptions.
 
     unsigned long flags;
     
-    write_lock_irqsave(&eventID_list_lock, flags);  //lock write
+
+
+    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
+    struct event * this_event = get_event(eventID); // Search for event in event list.
+    if (this_event == NULL) return -1;  // Event not found.
     
-    struct event * this_event = get_event(eventID);
+    this_event->wait_flag = false; // Send a signal to wake up tasks.
     
-    if (this_event == NULL) return -1;
+    int processes_signaled = get_list_length(&(this_event->wait_queue.task_list));   // Get the number of processes waiting on this event.
+    read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
     
-    this_event->go_aheads++;
+
+    wake_up(&(this_event->wait_queue)); // For all waiting tasks to check if wait_flag is false, if yes, wake up!
     
-    int processes_signaled = count_event(&(this_event->wait_queue.task_list));   //get the number of processes waiting on this event
-    
-    wake_up_interruptible(&(this_event->wait_queue));
-    
-    write_unlock_irqrestore(&eventID_list_lock, flags); // unlock write
 
     return processes_signaled;
 }
 
 
 
-//if eventIDs != NULL && num >= event_count, copy all event IDs to user array pointed to by eventIDs
-//if eventIDs == NULL || num < event_count, do not copy
-//return the number of active events on success
-//return -1 on failure
+
+/*
+ * If eventIDs != NULL && num >= event_count, copy all event IDs to user array pointed to by eventIDs.
+ * If eventIDs == NULL || num < event_count, do not copy.
+ * Return the number of active events on success.
+ * Return -1 on failure.
+ */
 asmlinkage long sys_doeventinfo(int num, int * eventIDs)
 {
 
-    int event_count = count_event(&global_event.eventID_list);
+    int event_count = get_list_length(&global_event.eventID_list);
     //arguments exception check
     if (num < event_count || eventIDs == NULL)
         return event_count;
@@ -198,5 +263,41 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
     }
     
     return event_count;
+}
+
+
+
+
+
+/*
+ * Change the UID and GID of the event with the given eventID to the given UID and GID.
+ * Return 0 on success.
+ * Return -1 on failure.
+ */
+asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
+{
+    return 0;
+}
+
+/*
+ * Change the user signal enable bit to UIDFlag and the group signal enable bit to GIDFlag.
+ * Return 0 on success.
+ * Retutn -1 on failure.
+ */
+asmlinkage long sys_doeventchmod(int eventID, uid_t * UID, gid_t GID, int * UIDFlag, int * GIDFlag)
+{
+
+    return 0;
+}
+
+/*
+ * Place the UID, GID, User Signal Enable Bit and Group Signal Enable Bit into the memory pointed to by UID, GID, UIDFlag and GIDFlag respectively.
+ * Return 0 on success.
+ * Return -1 on filure.
+ */
+asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t GID, int * UIDFlag, int * GIDFlag)
+{
+
+    return 0;
 }
 
