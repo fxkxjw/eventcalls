@@ -174,7 +174,8 @@ asmlinkage long sys_doeventwait(int eventID)
     read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
 
     /*
-     * Wait in queue until wait flag is false.
+     * Wait in queue until wait_flag is false.
+     * wait_flag is check each time the wait queue is waked up.
      * This function includes adding task to wait queue and removing from queue.
      * Remember to call wake_up() each time after wait_flag changes to check whether wait flag is false.
      */
