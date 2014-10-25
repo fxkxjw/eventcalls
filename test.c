@@ -4,6 +4,24 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 
+// test the doeventinfo 
+int main(int argc, char **argv){
+        int num,num2,i;
+        int a[10];
+        num = syscall(185,0,NULL);
+        printf("Numbers of events: %d\n", num);
+        //eIDs = (int *)malloc(num * sizeof(int));
+        num2 = syscall(185,num,a);
+        printf("Second return number: %d\n", num2);
+        for(i=0;i<num;i++){
+                printf("Event ID : \n", a[i]);
+        }
+        return 0;
+}
+
+
+
+
 // find the state of a process with given pid
 int main (int argc, char **argv)
 {
