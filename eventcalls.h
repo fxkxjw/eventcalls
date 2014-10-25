@@ -39,10 +39,10 @@
 
 struct event
 {
-    int UID;
-    int GID;
-    char user_sig_enable;
-    char group_sig_enable;
+    uid_t UID;
+    gid_t GID;
+    int UIDFlag;
+    int GIDFlag;
 
     int eventID;    //eventID should be positive integers
 
@@ -131,14 +131,14 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID);
  * Return 0 on success.
  * Retutn -1 on failure.
  */
-asmlinkage long sys_doeventchmod(int eventID, uid_t * UID, gid_t GID, int * UIDFlag, int * GIDFlag);
+asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag);
 
 /*
  * Place the UID, GID, User Signal Enable Bit and Group Signal Enable Bit into the memory pointed to by UID, GID, UIDFlag and GIDFlag respectively.
  * Return 0 on success.
  * Return -1 on filure.
  */
-asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t GID, int * UIDFlag, int * GIDFlag);
+asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t * GID, int * UIDFlag, int * GIDFlag);
 
 
 extern rwlock_t eventID_list_lock;  //provide read write lock to evnetID list

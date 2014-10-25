@@ -20,6 +20,12 @@ bool event_initialized;
  */
 int get_list_length(struct list_head * head)
 {
+    // Check arguemnts.
+    if (head == NULL) {
+        printk("error get_list_length(): invalid argument\n");
+        return -1;
+    }
+
     int length = 0;
     struct list_head * pos;
     list_for_each(pos, head) length++;
@@ -41,7 +47,13 @@ struct event * get_event(int eventID)
 {
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error get_event(): event not initialized\n");
+        return -1;
+    }
+
+    // Check arguments.
+    if (eventID == NULL || eventID <= 0) {
+        printk("error get_event(): invalid eventID\n");
         return -1;
     }
     
@@ -51,6 +63,8 @@ struct event * get_event(int eventID)
             return pos;
         }
     }
+
+
     return (struct event *) NULL;
 }
 
@@ -95,14 +109,19 @@ asmlinkage long sys_doeventopen()
 
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventopen(): event not initialized\n");
         return -1;
     }
 
     struct event * new_event = kmalloc(sizeof(struct event), GFP_KERNEL);
 
+    // Initialize attributes of new_event.
+    new_event->UID = current->real_cred->uid;  
+    new_event->GID = current->real_cred->gid;
+    new_event->UIDFlag = 1;
+    new_event->GIDFlag = 1;
     INIT_LIST_HEAD(&(new_event->eventID_list)); // Initialize event list entry.
-    new_event->wait_stage = 0;  // Initialize wait_stage.
+    new_event->wait_stage = 0;
 
     unsigned long flags;
 
@@ -129,22 +148,26 @@ asmlinkage long sys_doeventopen()
  * Free memory which hold the event.
  * Return the number of processed signaled on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)
  */
 asmlinkage long sys_doeventclose(int eventID)
 {
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventclose(): event not initialized\n");
         return -1;
     }
 
-
-    if (eventID <= 0) return -1;    //check argument exception
+    // Check arguments.
+    if (eventID == NULL || eventID <= 0) {
+        printk("error sys_doeventclose(): invalid eventID\n");
+        return -1;
+    }
     
+
+
     unsigned long flags;
-
-
-
     read_lock_irqsave(&eventID_list_lock, flags);   //lock read
     struct event * this_event = get_event(eventID); //search for event in event list
     read_unlock_irqrestore(&eventID_list_lock, flags);  //unlock read
@@ -152,7 +175,15 @@ asmlinkage long sys_doeventclose(int eventID)
     
     // If event not found.
     if (this_event == NULL) {
-        printk("error: event not found. eventID = %d\n", eventID);
+        printk("error sys_doeventclose(): event not found. eventID = %d\n", eventID);
+        return -1;
+    }
+
+    // Check accessibility.
+    uid_t uid = current->real_cred->uid;
+    gid_t gid = current->real_cred->gid;
+    if (uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)) {
+        printk("sys_doeventclose(): access denied\n");
         return -1;
     }
 
@@ -185,32 +216,47 @@ asmlinkage long sys_doeventclose(int eventID)
  * Make the calling tasks wait in the wait queue of the event with the given eventID.
  * Rreturn 0 on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)
  */
 asmlinkage long sys_doeventwait(int eventID)
 {
 
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventwait(): event not initialized\n");
+        return -1;
+    }
+
+    // Check arguments.
+    if (eventID == NULL || eventID <= 0) {
+        printk("error sys_doeventwait(): invalid eventID\n");
         return -1;
     }
 
 
-    if (eventID <= 0) return -1;
 
     unsigned long flags;  
-    
-    
-
     read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
     struct event * this_event = get_event(eventID); // Search for the event in event list
     read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
     
+
     // If event not found.
     if (this_event == NULL) {
-        printk("error: event not found. eventID = %d\n", eventID);
+        printk("error sys_doeventwait(): event not found. eventID = %d\n", eventID);
         return -1;
     }
+
+
+    // Check accessibility.
+    uid_t uid = current->real_cred->uid;
+    gid_t gid = current->real_cred->gid;
+    if (uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)) {
+        printk("sys_doeventwait(): access denied\n");
+        return -1;
+    }
+
 
     /*
      * If wait_stage changes between execution of this line and execution of wait_event()
@@ -223,6 +269,7 @@ asmlinkage long sys_doeventwait(int eventID)
      * wait_stage is check each time the wait queue is waked up.
      * This function includes adding task to wait queue and removing from queue.
      * Remember to call wake_up() each time after wait_stage changes to check the value of wait_stage.
+     * Also remember to release any lock before calling wait_event(), or there could be DEADLOCK!
      */
     wait_event(this_event->wait_queue, this_event->wait_stage != x);
 
@@ -240,33 +287,56 @@ asmlinkage long sys_doeventwait(int eventID)
  * Remove all tasks from waiting queue.
  * Return the number of processes signaled on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)
  */
 asmlinkage long sys_doeventsig(int eventID)
 {
 
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventsig(): event not initialized\n");
+        return -1;
+    }
+
+    // Check arguments.
+    if (eventID == NULL || eventID <= 0) {
+        printk("error sys_doeventsig(): invalid eventID\n");
+        return -1;
+    } 
+
+
+    unsigned long flags;
+    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
+    struct event * this_event = get_event(eventID); // Search for event in event list.
+    read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
+    
+
+
+    // If event not found.
+    if (this_event == NULL) {
+        printk("error sys_doeventsig(): event not found. eventID = %d\n", eventID);
         return -1;
     }
 
 
-    if (eventID <= 0) return -1;    // Check argument exceptions.
 
-    unsigned long flags;
-    
+    // Check accessibility.
+    uid_t uid = current->real_cred->uid;
+    gid_t gid = current->real_cred->gid;
+    if (uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)) {
+        printk("sys_doeventsig(): access denied\n");
+        return -1;
+    }
 
 
-    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
-    struct event * this_event = get_event(eventID); // Search for event in event list.
-    if (this_event == NULL) return -1;  // Event not found.
+
     
     this_event->wait_stage++; // Wake up tasks waiting on this stage.    
     int processes_signaled = get_list_length(&(this_event->wait_queue.task_list));   // Get the number of processes waiting on this event.
-    read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
     
 
-    wake_up(&(this_event->wait_queue)); // For all waiting tasks to check if wait_stage has been changed since they start sleep, if yes, wake up!
+    wake_up(&(this_event->wait_queue)); // For all waiting tasks to check if wait_stage has been changed since they start sleep.
     
 
     return processes_signaled;
@@ -285,13 +355,15 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
 {
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventinfo(): event not initialized\n");
         return -1;
     }
 
 
     int event_count = get_list_length(&global_event.eventID_list);
-    //arguments exception check
+    
+    
+    // Check arguments exceptions
     if (num < event_count || eventIDs == NULL)
         return event_count;
     
@@ -299,7 +371,7 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
     //kmalloc an array for storing event IDs
     int * sys_eventIDs;
     if ((sys_eventIDs = kmalloc(event_count * sizeof(int), GFP_KERNEL)) == NULL) {
-        printk("error kmalloc\n");
+        printk("error sys_doeventinfo(): kmalloc()\n");
         return -1;
     }
 
@@ -317,7 +389,7 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
 
     //copy to user
     if (copy_to_user(eventIDs, sys_eventIDs, event_count * sizeof(int)) != 0) {
-        printk("error copy_to_user\n");
+        printk("error sys_doeventinfo(): copy_to_user()\n");
         return -1;
     }
     
@@ -332,15 +404,45 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
  * Change the UID and GID of the event with the given eventID to the given UID and GID.
  * Return 0 on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != event->UID
  */
 asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
 {
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventchown(): event not initialized\n");
         return -1;
     }
 
+    // Check arguments.
+    if (eventID == NULL || eventID <= 0 || UID == NULL || GID == NULL) {
+        printk("error sys_doeventchown(): invalid arguments\n");
+        return -1;
+    }
+
+    read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
+    struct event * this_event = get_event(eventID); // Search for the event in event list
+    read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
+    
+    // If event not found.
+    if (this_event == NULL) {
+        printk("error sys_doeventchown(): event not found. eventID = %d\n", eventID);
+        return -1;
+    }
+
+
+    // Check accessibility.
+    uid_t uid = current->real_cred->uid;
+    if (uid != event->UID) {
+        printk("sys_doeventchown(): access denied\n");
+        return -1;
+    }
+
+
+
+    this_event->UID = UID;
+    this_event->GID = GID;
 
     return 0;
 }
@@ -350,18 +452,45 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
 
 
 /*
- * Change the user signal enable bit to UIDFlag and the group signal enable bit to GIDFlag.
+ * Change event->UIDFlag to UIDFlag and event->GIDFlag to GIDFlag.
  * Return 0 on success.
  * Retutn -1 on failure.
+ * Access denied:
+ *  uid != event->UID
  */
-asmlinkage long sys_doeventchmod(int eventID, uid_t * UID, gid_t GID, int * UIDFlag, int * GIDFlag)
+asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
 {
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventchmod(): event not initialized\n");
         return -1;
     }
 
+    // Check arguments.
+    if (eventID == NULL || eventID <= 0 || UIDFlag == NULL || GIDFlag == NULL) {
+        printk("error sys_doeventchmod(): invalid arguments\n");
+        return -1;
+    }
+
+    read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
+    struct event * this_event = get_event(eventID); // Search for the event in event list
+    read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
+    
+    // If event not found.
+    if (this_event == NULL) {
+        printk("error sys_doeventchmod(): event not found. eventID = %d\n", eventID);
+        return -1;
+    }
+
+    // Check accessibility.
+    uid_t uid = current->real_cred->uid;
+    if (uid != event->UID) {
+        printk("sys_doeventchmod(): access denied\n");
+        return -1;
+    }
+
+    this_event->UIDFlag = UIDFlag;
+    this_event->GIDFlag = GIDFlag;
 
     return 0;
 }
@@ -375,11 +504,48 @@ asmlinkage long sys_doeventchmod(int eventID, uid_t * UID, gid_t GID, int * UIDF
  * Return 0 on success.
  * Return -1 on filure.
  */
-asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t GID, int * UIDFlag, int * GIDFlag)
+asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t * GID, int * UIDFlag, int * GIDFlag)
 {
     // Remember to check if event is initialized at kernel boot before actually doing anything
     if (event_initialized == false) {
-        printk("error: event not initialized\n");
+        printk("error sys_doeventstat(): event not initialized\n");
+        return -1;
+    }
+
+    // Check arguments.
+    if (eventID == NULL || eventID <= 0) {
+        printk("error sys_doeventstat(): invalid eventID\n");
+        return -1;
+    }
+
+    read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
+    struct event * this_event = get_event(eventID); // Search for the event in event list
+    read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
+    
+    // If event not found.
+    if (this_event == NULL) {
+        printk("error sys_doeventstat(): event not found. eventID = %d\n", eventID);
+        return -1;
+    }
+
+
+    if (copy_to_user(UID, this_event->UID, sizeof(uid_t)) != 0) {
+        printk("error sys_doeventstat(): copy_to_user()\n");
+        return -1;
+    }
+
+    if (copy_to_user(GID, this_event->GID, sizeof(gid_t)) != 0) {
+        printk("error sys_doeventstat(): copy_to_user()\n");
+        return -1;
+    }
+
+    if (copy_to_user(UIDFlag, this_event->UIDFlag, sizeof(int)) != 0) {
+        printk("error sys_doeventstat(): copy_to_user()\n");
+        return -1;
+    }
+
+    if (copy_to_user(GIDFlag, this_event->GIDFlag, sizeof(int)) != 0) {
+        printk("error sys_doeventstat(): copy_to_user()\n");
         return -1;
     }
 

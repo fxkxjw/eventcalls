@@ -12,4 +12,3 @@ John Criswel
 
 Fall, 2014
 
-
