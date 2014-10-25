@@ -182,7 +182,7 @@ asmlinkage long sys_doeventclose(int eventID)
     // Check accessibility.
     uid_t uid = current->real_cred->uid;
     gid_t gid = current->real_cred->gid;
-    if (uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)) {
+    if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventclose(): access denied\n");
         return -1;
     }
@@ -252,7 +252,7 @@ asmlinkage long sys_doeventwait(int eventID)
     // Check accessibility.
     uid_t uid = current->real_cred->uid;
     gid_t gid = current->real_cred->gid;
-    if (uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)) {
+    if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventwait(): access denied\n");
         return -1;
     }
@@ -324,7 +324,7 @@ asmlinkage long sys_doeventsig(int eventID)
     // Check accessibility.
     uid_t uid = current->real_cred->uid;
     gid_t gid = current->real_cred->gid;
-    if (uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)) {
+    if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventsig(): access denied\n");
         return -1;
     }
@@ -359,8 +359,11 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
         return -1;
     }
 
-
+    unsigned long flags;
+    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
     int event_count = get_list_length(&global_event.eventID_list);
+    read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
+
     
     
     // Check arguments exceptions
@@ -379,13 +382,16 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
     //insert all event IDs to array pointed to by sys_eventIDs
     int i = 0;
     struct event * pos; 
+    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
     list_for_each_entry(pos, &global_event.eventID_list, eventID_list) {    
             
         //do not insert or count global_event whose eventID is 0
         if ((pos->eventID) != 0) {  
-            *(sys_eventIDs + i) = pos->eventID;   
+            *(sys_eventIDs + i++) = pos->eventID;   
         }
     }
+    read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
+    
 
     //copy to user
     if (copy_to_user(eventIDs, sys_eventIDs, event_count * sizeof(int)) != 0) {
@@ -421,6 +427,7 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
         return -1;
     }
 
+    unsigned long flags;    
     read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
     struct event * this_event = get_event(eventID); // Search for the event in event list
     read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
@@ -434,7 +441,7 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
 
     // Check accessibility.
     uid_t uid = current->real_cred->uid;
-    if (uid != event->UID) {
+    if (uid != this_event->UID) {
         printk("sys_doeventchown(): access denied\n");
         return -1;
     }
@@ -472,6 +479,7 @@ asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
         return -1;
     }
 
+    unsigned long flags;    
     read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
     struct event * this_event = get_event(eventID); // Search for the event in event list
     read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
@@ -484,7 +492,7 @@ asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
 
     // Check accessibility.
     uid_t uid = current->real_cred->uid;
-    if (uid != event->UID) {
+    if (uid != this_event->UID) {
         printk("sys_doeventchmod(): access denied\n");
         return -1;
     }
@@ -518,6 +526,7 @@ asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t * GID, int * UID
         return -1;
     }
 
+    unsigned long flags;    
     read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
     struct event * this_event = get_event(eventID); // Search for the event in event list
     read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read

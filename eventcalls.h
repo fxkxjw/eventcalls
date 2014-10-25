@@ -60,11 +60,15 @@ struct event
 };
 
 
+
+
 /*
  * Return the length of the list with given list_head.
  * Remember to call read_lock before.
  */
 int get_list_length(struct list_head * head);   
+
+
 
 /*
  * Return a pointer to the event with given event ID.
@@ -73,13 +77,19 @@ int get_list_length(struct list_head * head);
  */
 struct event * get_event(int eventID);
 
+
+
+
 /*
  * Initialize a global event as the head of a linked list of other events.
  * This function should be called in function start_kernel() in linux/init/main.c at kernel boot.
  */
 void doevent_init();
 
-/*
+
+
+
+/* 181
  * Create a new event and assign an event ID to it.
  * Add the new event to the global event list.
  * Return event id on success.
@@ -87,31 +97,49 @@ void doevent_init();
  */
 asmlinkage long sys_doeventopen();
 
-/*
+
+
+
+/* 182
  * Wake up all tasks in the waiting queue of the event with given eventID.
  * Remove the event from global event list.
  * Free memory which hold the event.
  * Return the number of processed signaled on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)
  */
 asmlinkage long sys_doeventclose(int eventID);
 
-/*
+
+
+
+/* 183
  * Make the calling tasks wait in the wait queue of the event with the given eventID.
  * Rreturn 0 on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)
  */
 asmlinkage long sys_doeventwait(int eventID);
 
-/*
+
+
+
+/* 184
  * Wake up all tasks waiting in the event with the given event ID.
  * Remove all tasks from waiting queue.
  * Return the number of processes signaled on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != 0 && (uid != event->UID || event->UIDFlag == 0) && (gid != event->GID || event->GIDFlag == 0)
  */
 asmlinkage long sys_doeventsig(int eventID);
 
-/*
+
+
+
+/* 185
  * If eventIDs != NULL && num >= event_count, copy all event IDs to user array pointed to by eventIDs.
  * If eventIDs == NULL || num < event_count, do not copy.
  * Return the number of active events on success.
@@ -119,21 +147,34 @@ asmlinkage long sys_doeventsig(int eventID);
  */
 asmlinkage long sys_doeventinfo(int num, int * eventIDs);
 
-/*
+
+
+
+/* 205
  * Change the UID and GID of the event with the given eventID to the given UID and GID.
  * Return 0 on success.
  * Return -1 on failure.
+ * Access denied:
+ *  uid != event->UID
  */
 asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID);
 
-/*
- * Change the user signal enable bit to UIDFlag and the group signal enable bit to GIDFlag.
+
+
+
+/* 211
+ * Change event->UIDFlag to UIDFlag and event->GIDFlag to GIDFlag.
  * Return 0 on success.
  * Retutn -1 on failure.
+ * Access denied:
+ *  uid != event->UID
  */
 asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag);
 
-/*
+
+
+
+/* 214
  * Place the UID, GID, User Signal Enable Bit and Group Signal Enable Bit into the memory pointed to by UID, GID, UIDFlag and GIDFlag respectively.
  * Return 0 on success.
  * Return -1 on filure.
