@@ -50,7 +50,13 @@ struct event
 
     wait_queue_head_t wait_queue;   //implement a wait queue of processes waiting on the event
 
-    bool wait_flag;  // wait_flag == true to keep tasks waiting; == false to wake up tasks.
+    /*
+     * Wait condition for each task is that
+     * wait_stage remains unchanged from the moment the value of wait_stage is fetched.
+     * wait_stage is initialize to 0
+     * and increases by 1 each time sys_doeventsig() is called.
+     */
+    int wait_stage;
 };
 
 
@@ -92,7 +98,7 @@ asmlinkage long sys_doeventclose(int eventID);
 
 /*
  * Make the calling tasks wait in the wait queue of the event with the given eventID.
- * Rreturn 1 on success.
+ * Rreturn 0 on success.
  * Return -1 on failure.
  */
 asmlinkage long sys_doeventwait(int eventID);
