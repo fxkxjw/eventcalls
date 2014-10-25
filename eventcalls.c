@@ -359,17 +359,12 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
         return -1;
     }
 
-    unsigned long flags;
-    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
-    int event_count = get_list_length(&global_event.eventID_list);
-    read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
+    
 
-    
-    
-    // Check arguments exceptions
-    if (num < event_count || eventIDs == NULL)
-        return event_count;
-    
+
+    unsigned long flags;    
+    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read.
+    int event_count = get_list_length(&global_event.eventID_list);  // Get event count.
 
     //kmalloc an array for storing event IDs
     int * sys_eventIDs;
@@ -378,11 +373,10 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
         return -1;
     }
 
-   
     //insert all event IDs to array pointed to by sys_eventIDs
     int i = 0;
     struct event * pos; 
-    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
+     
     list_for_each_entry(pos, &global_event.eventID_list, eventID_list) {    
             
         //do not insert or count global_event whose eventID is 0
@@ -390,14 +384,27 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
             *(sys_eventIDs + i++) = pos->eventID;   
         }
     }
+
     read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
+
+    
+    
+        
+    // Check arguments.
+    if (num < event_count || eventIDs == NULL) {
+        kfree(sys_eventIDs);
+        return event_count;
+    }
+    
     
 
-    //copy to user
+    // Copy to user.
     if (copy_to_user(eventIDs, sys_eventIDs, event_count * sizeof(int)) != 0) {
         printk("error sys_doeventinfo(): copy_to_user()\n");
         return -1;
     }
+
+    kfree(sys_eventIDs);
     
     return event_count;
 }
