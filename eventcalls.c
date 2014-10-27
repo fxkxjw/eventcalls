@@ -51,11 +51,6 @@ struct event * get_event(int eventID)
         return -1;
     }
 
-    /* Check arguments. */
-    if (eventID == NULL || eventID <= 0) {
-        printk("error get_event(): invalid eventID\n");
-        return -1;
-    }
     
     struct event * pos;
     list_for_each_entry(pos, &global_event.eventID_list, eventID_list) {
@@ -162,14 +157,7 @@ asmlinkage long sys_doeventclose(int eventID)
     if (event_initialized == false) {
         printk("error sys_doeventclose(): event not initialized\n");
         return -1;
-    }
-
-    /* Check arguments. */
-    if (eventID == NULL || eventID <= 0) {
-        printk("error sys_doeventclose(): invalid eventID\n");
-        return -1;
-    }
-    
+    }    
 
 
     unsigned long flags;
@@ -235,13 +223,6 @@ asmlinkage long sys_doeventwait(int eventID)
         printk("error sys_doeventwait(): event not initialized\n");
         return -1;
     }
-
-    /* Check arguments. */
-    if (eventID == NULL || eventID <= 0) {
-        printk("error sys_doeventwait(): invalid eventID\n");
-        return -1;
-    }
-
 
 
     unsigned long flags;
@@ -309,13 +290,6 @@ asmlinkage long sys_doeventsig(int eventID)
         return -1;
     }
 
-    /* Check arguments. */
-    if (eventID == NULL || eventID <= 0) {
-        printk("error sys_doeventsig(): invalid eventID\n");
-        return -1;
-    } 
-
-
     unsigned long flags;
     /* Lock read. */
     read_lock_irqsave(&eventID_list_lock, flags);
@@ -373,8 +347,6 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
         printk("error sys_doeventinfo(): event not initialized\n");
         return -1;
     }
-
-    
 
 
     unsigned long flags;
@@ -446,11 +418,6 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
         return -1;
     }
 
-    /* Check arguments. */
-    if (eventID == NULL || eventID <= 0 || UID == NULL || GID == NULL) {
-        printk("error sys_doeventchown(): invalid arguments\n");
-        return -1;
-    }
 
     unsigned long flags;
     /* Lock Read. */
@@ -502,7 +469,7 @@ asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
     }
 
     /* Check arguments. */
-    if (eventID == NULL || eventID <= 0 || UIDFlag == NULL || GIDFlag == NULL) {
+    if (UIDFlag < 0 || UIDFlag > 1 || GIDFlag < 0 || GIDFlag > 1) {
         printk("error sys_doeventchmod(): invalid arguments\n");
         return -1;
     }
@@ -552,7 +519,7 @@ asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t * GID, int * UID
     }
 
     /* Check arguments. */
-    if (eventID == NULL || eventID <= 0) {
+    if (UID == NULL || GID == NULL || UIDFlag == NULL || GIDFlag == NULL) {
         printk("error sys_doeventstat(): invalid eventID\n");
         return -1;
     }
