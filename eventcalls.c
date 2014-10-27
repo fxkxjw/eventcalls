@@ -359,17 +359,12 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
         return -1;
     }
 
-    unsigned long flags;
-    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
-    int event_count = get_list_length(&global_event.eventID_list);
-    read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
+    
 
-    
-    
-    // Check arguments exceptions
-    if (num < event_count || eventIDs == NULL)
-        return event_count;
-    
+
+    unsigned long flags;    
+    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read.
+    int event_count = get_list_length(&global_event.eventID_list);  // Get event count.
 
     //kmalloc an array for storing event IDs
     int * sys_eventIDs;
@@ -378,11 +373,10 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
         return -1;
     }
 
-   
     //insert all event IDs to array pointed to by sys_eventIDs
     int i = 0;
     struct event * pos; 
-    read_lock_irqsave(&eventID_list_lock, flags);  // Lock read. 
+     
     list_for_each_entry(pos, &global_event.eventID_list, eventID_list) {    
             
         //do not insert or count global_event whose eventID is 0
@@ -390,14 +384,27 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs)
             *(sys_eventIDs + i++) = pos->eventID;   
         }
     }
+
     read_unlock_irqrestore(&eventID_list_lock, flags); // Unlock read.
+
+    
+    
+        
+    // Check arguments.
+    if (num < event_count || eventIDs == NULL) {
+        kfree(sys_eventIDs);
+        return event_count;
+    }
+    
     
 
-    //copy to user
+    // Copy to user.
     if (copy_to_user(eventIDs, sys_eventIDs, event_count * sizeof(int)) != 0) {
         printk("error sys_doeventinfo(): copy_to_user()\n");
         return -1;
     }
+
+    kfree(sys_eventIDs);
     
     return event_count;
 }
@@ -467,30 +474,33 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
  */
 asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
 {
-    // Remember to check if event is initialized at kernel boot before actually doing anything
+    /* Remember to check if event is initialized at kernel boot before actually doing anything. */
     if (event_initialized == false) {
         printk("error sys_doeventchmod(): event not initialized\n");
         return -1;
     }
 
-    // Check arguments.
+    /* Check arguments. */
     if (eventID == NULL || eventID <= 0 || UIDFlag == NULL || GIDFlag == NULL) {
         printk("error sys_doeventchmod(): invalid arguments\n");
         return -1;
     }
 
-    unsigned long flags;    
-    read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
-    struct event * this_event = get_event(eventID); // Search for the event in event list
-    read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
-    
-    // If event not found.
+    unsigned long flags;   
+    /* Lock read. */    
+    read_lock_irqsave(&eventID_list_lock, flags);
+    /* Search for the event in event list. */    
+    struct event * this_event = get_event(eventID);
+    read_unlock_irqrestore(&eventID_list_lock, flags);
+    /* Read unlocked. */
+
+    /* If event not found. */
     if (this_event == NULL) {
         printk("error sys_doeventchmod(): event not found. eventID = %d\n", eventID);
         return -1;
     }
 
-    // Check accessibility.
+    /* Check accessibility. */
     uid_t uid = current->real_cred->uid;
     if (uid != this_event->UID) {
         printk("sys_doeventchmod(): access denied\n");
@@ -514,46 +524,51 @@ asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
  */
 asmlinkage long sys_doeventstat(int eventID, uid_t * UID, gid_t * GID, int * UIDFlag, int * GIDFlag)
 {
-    // Remember to check if event is initialized at kernel boot before actually doing anything
+    /* Remember to check if event is initialized at kernel boot before actually doing anything. */
     if (event_initialized == false) {
         printk("error sys_doeventstat(): event not initialized\n");
         return -1;
     }
 
-    // Check arguments.
+    /* Check arguments. */
     if (eventID == NULL || eventID <= 0) {
         printk("error sys_doeventstat(): invalid eventID\n");
         return -1;
     }
 
-    unsigned long flags;    
-    read_lock_irqsave(&eventID_list_lock, flags);   // Lock read
-    struct event * this_event = get_event(eventID); // Search for the event in event list
-    read_unlock_irqrestore(&eventID_list_lock, flags);  // Unlock read
-    
-    // If event not found.
+    unsigned long flags;  
+    /* Lock read. */
+    read_lock_irqsave(&eventID_list_lock, flags); 
+    /* Search for the event in event list. */
+    struct event * this_event = get_event(eventID); 
+    read_unlock_irqrestore(&eventID_list_lock, flags); 
+    /* Read unlocked. */
+
+    /* If event not found. */
     if (this_event == NULL) {
         printk("error sys_doeventstat(): event not found. eventID = %d\n", eventID);
         return -1;
     }
 
+    
 
-    if (copy_to_user(UID, this_event->UID, sizeof(uid_t)) != 0) {
+
+    if (copy_to_user(UID, &(this_event->UID), sizeof(uid_t)) != 0) {
         printk("error sys_doeventstat(): copy_to_user()\n");
         return -1;
     }
 
-    if (copy_to_user(GID, this_event->GID, sizeof(gid_t)) != 0) {
+    if (copy_to_user(GID, &(this_event->GID), sizeof(gid_t)) != 0) {
         printk("error sys_doeventstat(): copy_to_user()\n");
         return -1;
     }
 
-    if (copy_to_user(UIDFlag, this_event->UIDFlag, sizeof(int)) != 0) {
+    if (copy_to_user(UIDFlag, &(this_event->UIDFlag), sizeof(int)) != 0) {
         printk("error sys_doeventstat(): copy_to_user()\n");
         return -1;
     }
 
-    if (copy_to_user(GIDFlag, this_event->GIDFlag, sizeof(int)) != 0) {
+    if (copy_to_user(GIDFlag, &(this_event->GIDFlag), sizeof(int)) != 0) {
         printk("error sys_doeventstat(): copy_to_user()\n");
         return -1;
     }
