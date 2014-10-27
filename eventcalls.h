@@ -30,12 +30,11 @@
 
 #include <linux/kernel.h>
 
-#include <linux/sched.h>    // wake_up()
-#include <linux/list.h> //list_head
-#include <linux/wait.h> //wait_queue_head_t
+#include <linux/sched.h>   
+#include <linux/list.h> 
+#include <linux/wait.h>
 #include <linux/spinlock.h>
-#include <linux/types.h>    //uid_t gid_t
-
+#include <linux/types.h>
 
 struct event
 {
@@ -43,12 +42,12 @@ struct event
     gid_t GID;
     int UIDFlag;
     int GIDFlag;
-
-    int eventID;    //eventID should be positive integers
-
-    struct list_head eventID_list;  //implement a kernel double-linked list fo events
-
-    wait_queue_head_t wait_queue;   //implement a wait queue of processes waiting on the event
+    /* eventID should be positive integers. */
+    int eventID;    
+    /* Implement a kernel double-linked list fo events. */
+    struct list_head eventID_list;
+    /* Implement a wait queue of processes waiting on the event. */
+    wait_queue_head_t wait_queue;
 
     /*
      * Wait condition for each task is that
@@ -155,7 +154,7 @@ asmlinkage long sys_doeventinfo(int num, int * eventIDs);
  * Return 0 on success.
  * Return -1 on failure.
  * Access denied:
- *  uid != event->UID
+ *  uid != 0 && uid != event->UID
  */
 asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID);
 
@@ -167,7 +166,7 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID);
  * Return 0 on success.
  * Retutn -1 on failure.
  * Access denied:
- *  uid != event->UID
+ *  uid != 0 && uid != event->UID
  */
 asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag);
 
