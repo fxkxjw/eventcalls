@@ -4,9 +4,11 @@
 #include <linux/eventcalls.h>
 
 
-
+/* Event list head with eventID is 0 and is initilized during kernel boot. */
 struct event global_event;
+/* A read write lock on event list. */
 rwlock_t eventID_list_lock;
+/* A state indicating whether the global_event has been initialized successfully. */
 bool event_initialized;
 
 
@@ -83,6 +85,8 @@ void doevent_init()
 
     global_event.eventID = 0;
 
+    global_event.wait_queue_lock = RW_LOCK_UNLOCKED;
+
     init_waitqueue_head(&global_event.wait_queue);
     event_initialized = true;
 }
@@ -115,12 +119,13 @@ asmlinkage long sys_doeventopen()
     new_event->GID = current->real_cred->gid;
     new_event->UIDFlag = 1;
     new_event->GIDFlag = 1;
+    new_event->wait_queue_lock = RW_LOCK_UNLOCKED;
+    
     /* Initialize event list entry. */
     INIT_LIST_HEAD(&(new_event->eventID_list));
-    new_event->wait_stage = 0;
 
     unsigned long flags;
-    /* Lock write. */
+    /* Lock write on event list. */
     write_lock_irqsave(&eventID_list_lock, flags);
     /* Add new_event to the tail of event list. */
     list_add_tail(&(new_event->eventID_list), &global_event.eventID_list);
@@ -131,7 +136,7 @@ asmlinkage long sys_doeventopen()
     /* Initialize wait queue. */
     init_waitqueue_head(&(new_event->wait_queue)); 
     write_unlock_irqrestore(&eventID_list_lock, flags);
-    /* Write unlocked. */
+    /* Write unlocked on event list. */
 
 
     return new_event->eventID;
@@ -248,21 +253,24 @@ asmlinkage long sys_doeventwait(int eventID)
         return -1;
     }
 
+    
 
-    /*
-     * If wait_stage changes between execution of this line and execution of wait_event()
-     * the task will not wait on the event.
+    DEFINE_WAIT(wait);
+    add_wait_queue(&(this_event->wait_queue), &wait);
+    /* 
+     * Lock wait_queue so that no other process can wait on or wake up the wait queue,
+     * until this process has changed its status.
      */
-    int x = this_event->wait_stage;
-
-    /*
-     * Wait in queue until wait_stage changes.
-     * wait_stage is check each time the wait queue is waked up.
-     * This function includes adding task to wait queue and removing from queue.
-     * Remember to call wake_up() each time after wait_stage changes to check the value of wait_stage.
-     * Also remember to release any lock before calling wait_event(), or there could be DEADLOCK!
+    write_lock_irqsave(&(this_event->wait_queue_lock), flags);
+    /* Change task status to either TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE. */
+    prepare_to_wait(&(this_event->wait_queue_lock), &wait, TASK_INTERRUPTIBLE);
+    write_unlock_irqrestore(&(this_event->wait_queue_lock), flags);
+    /* 
+     * Wait queue has been unlocked.
+     * Other process can wait on this queue or wake up tasks on this queue.
      */
-    wait_event(this_event->wait_queue, this_event->wait_stage != x);
+    schedule();
+    finish_wait(&(this_event->wait_queue), &wait);
 
 
     return 0;
@@ -317,16 +325,25 @@ asmlinkage long sys_doeventsig(int eventID)
     }
 
 
-
+    /*
+     * Lock the wait queue.
+     * So that no other tasks can wait on or wake up this queue,
+     * until all tasks waiting on this queue have been waken up.
+     */
+    write_lock_irqsave(&(this_event->wait_queue_lock), flags);
     
-    this_event->wait_stage++;   
     /* Get the number of processes waiting on this event. */
     int processes_signaled = get_list_length(&(this_event->wait_queue.task_list));  
     
-    /* Wake up tasks.
-     * For all waiting tasks to check if wait_stage has been changed since they start sleep.*/
+    /* Wake up tasks in the wait queue. */
     wake_up(&(this_event->wait_queue));
     
+    /*
+     * Since all tasks previously waiting on the queue have been waken up,
+     * we can release the lock.
+     */
+    write_unlock_irqrestore(&(this_event->wait_queue_lock), flags);
+
 
     return processes_signaled;
 }

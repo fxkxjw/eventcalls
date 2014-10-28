@@ -49,13 +49,8 @@ struct event
     /* Implement a wait queue of processes waiting on the event. */
     wait_queue_head_t wait_queue;
 
-    /*
-     * Wait condition for each task is that
-     * wait_stage remains unchanged from the moment the value of wait_stage is fetched.
-     * wait_stage is initialize to 0
-     * and increases by 1 each time sys_doeventsig() is called.
-     */
-    int wait_stage;
+    /* A read write lock on wait queue. */
+    rwlock_t wait_queue_lock;
 };
 
 
