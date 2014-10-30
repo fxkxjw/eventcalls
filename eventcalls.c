@@ -330,7 +330,7 @@ asmlinkage long sys_doeventsig(int eventID)
      * So that no other tasks can wait on or wake up this queue,
      * until all tasks waiting on this queue have been waken up.
      */
-    write_lock_irqsave(&(this_event->wait_queue_lock), flags);
+//    write_lock_irqsave(&(this_event->wait_queue_lock), flags);
     
     /* Get the number of processes waiting on this event. */
     int processes_signaled = get_list_length(&(this_event->wait_queue.task_list));  
@@ -342,7 +342,7 @@ asmlinkage long sys_doeventsig(int eventID)
      * Since all tasks previously waiting on the queue have been waken up,
      * we can release the lock.
      */
-    write_unlock_irqrestore(&(this_event->wait_queue_lock), flags);
+//    write_unlock_irqrestore(&(this_event->wait_queue_lock), flags);
 
 
     return processes_signaled;
