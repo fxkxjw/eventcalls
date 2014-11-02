@@ -115,8 +115,8 @@ asmlinkage long sys_doeventopen()
     struct event * new_event = kmalloc(sizeof(struct event), GFP_KERNEL);
 
     /* Initialize attributes of new_event. */
-    new_event->UID = current->cred->uid;  
-    new_event->GID = current->cred->gid;
+    new_event->UID = current->cred->euid;  
+    new_event->GID = current->cred->egid;
     new_event->UIDFlag = 1;
     new_event->GIDFlag = 1;
 //  new_event->wait_queue_lock = RW_LOCK_UNLOCKED;
@@ -181,8 +181,8 @@ asmlinkage long sys_doeventclose(int eventID)
     }
 
     /* Check accessibility. */
-    uid_t uid = current->cred->uid;
-    gid_t gid = current->cred->gid;
+    uid_t uid = current->cred->euid;
+    gid_t gid = current->cred->egid;
     if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventclose(): access denied\n");
         return -1;
@@ -246,8 +246,8 @@ asmlinkage long sys_doeventwait(int eventID)
 
 
     /* Check accessibility. */
-    uid_t uid = current->cred->uid;
-    gid_t gid = current->cred->gid;
+    uid_t uid = current->cred->euid;
+    gid_t gid = current->cred->egid;
     if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventwait(): access denied\n");
         return -1;
@@ -315,8 +315,8 @@ asmlinkage long sys_doeventsig(int eventID)
 
 
     /* Check accessibility. */
-    uid_t uid = current->cred->uid;
-    gid_t gid = current->cred->gid;
+    uid_t uid = current->cred->euid;
+    gid_t gid = current->cred->egid;
     if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventsig(): access denied\n");
         return -1;
@@ -441,7 +441,7 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
 
 
     /* Check accessibility. */
-    uid_t uid = current->cred->uid;
+    uid_t uid = current->cred->euid;
     if (uid != 0 && uid != this_event->UID) {
         printk("sys_doeventchown(): access denied\n");
         return -1;
@@ -495,7 +495,7 @@ asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
     }
 
     /* Check accessibility. */
-    uid_t uid = current->cred->uid;
+    uid_t uid = current->cred->euid;
     if (uid != 0 && uid != this_event->UID) {
         printk("sys_doeventchmod(): access denied\n");
         return -1;
