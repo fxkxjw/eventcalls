@@ -261,7 +261,7 @@ asmlinkage long sys_doeventwait(int eventID)
      * until this process has changed its status.
      */
     /* Change task status to either TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE. */
-    prepare_to_wait(&(this_event->wait_queue_lock), &wait, TASK_INTERRUPTIBLE);
+    prepare_to_wait(&(this_event->wait_queue), &wait, TASK_INTERRUPTIBLE);
     /* 
      * Wait queue has been unlocked.
      * Other process can wait on this queue or wake up tasks on this queue.
