@@ -49,8 +49,6 @@ struct event
     /* Implement a wait queue of processes waiting on the event. */
     wait_queue_head_t wait_queue;
 
-    /* A read write lock on wait queue. */
-    rwlock_t wait_queue_lock;
 };
 
 

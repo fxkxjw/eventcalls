@@ -85,7 +85,7 @@ void doevent_init()
 
     global_event.eventID = 0;
 
-    global_event.wait_queue_lock = RW_LOCK_UNLOCKED;
+//    global_event.wait_queue_lock = RW_LOCK_UNLOCKED;
 
     init_waitqueue_head(&global_event.wait_queue);
     event_initialized = true;
@@ -115,11 +115,11 @@ asmlinkage long sys_doeventopen()
     struct event * new_event = kmalloc(sizeof(struct event), GFP_KERNEL);
 
     /* Initialize attributes of new_event. */
-    new_event->UID = current->real_cred->uid;  
-    new_event->GID = current->real_cred->gid;
+    new_event->UID = current->cred->uid;  
+    new_event->GID = current->cred->gid;
     new_event->UIDFlag = 1;
     new_event->GIDFlag = 1;
-    new_event->wait_queue_lock = RW_LOCK_UNLOCKED;
+//  new_event->wait_queue_lock = RW_LOCK_UNLOCKED;
     
     /* Initialize event list entry. */
     INIT_LIST_HEAD(&(new_event->eventID_list));
@@ -181,8 +181,8 @@ asmlinkage long sys_doeventclose(int eventID)
     }
 
     /* Check accessibility. */
-    uid_t uid = current->real_cred->uid;
-    gid_t gid = current->real_cred->gid;
+    uid_t uid = current->cred->uid;
+    gid_t gid = current->cred->gid;
     if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventclose(): access denied\n");
         return -1;
@@ -246,8 +246,8 @@ asmlinkage long sys_doeventwait(int eventID)
 
 
     /* Check accessibility. */
-    uid_t uid = current->real_cred->uid;
-    gid_t gid = current->real_cred->gid;
+    uid_t uid = current->cred->uid;
+    gid_t gid = current->cred->gid;
     if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventwait(): access denied\n");
         return -1;
@@ -256,19 +256,17 @@ asmlinkage long sys_doeventwait(int eventID)
     
 
     DEFINE_WAIT(wait);
-    add_wait_queue(&(this_event->wait_queue), &wait);
     /* 
      * Lock wait_queue so that no other process can wait on or wake up the wait queue,
      * until this process has changed its status.
      */
-    write_lock_irqsave(&(this_event->wait_queue_lock), flags);
     /* Change task status to either TASK_INTERRUPTIBLE or TASK_UNINTERRUPTIBLE. */
     prepare_to_wait(&(this_event->wait_queue_lock), &wait, TASK_INTERRUPTIBLE);
-    write_unlock_irqrestore(&(this_event->wait_queue_lock), flags);
     /* 
      * Wait queue has been unlocked.
      * Other process can wait on this queue or wake up tasks on this queue.
      */
+
     schedule();
     finish_wait(&(this_event->wait_queue), &wait);
 
@@ -317,33 +315,24 @@ asmlinkage long sys_doeventsig(int eventID)
 
 
     /* Check accessibility. */
-    uid_t uid = current->real_cred->uid;
-    gid_t gid = current->real_cred->gid;
+    uid_t uid = current->cred->uid;
+    gid_t gid = current->cred->gid;
     if (uid != 0 && (uid != this_event->UID || this_event->UIDFlag == 0) && (gid != this_event->GID || this_event->GIDFlag == 0)) {
         printk("sys_doeventsig(): access denied\n");
         return -1;
     }
 
 
-    /*
-     * Lock the wait queue.
-     * So that no other tasks can wait on or wake up this queue,
-     * until all tasks waiting on this queue have been waken up.
-     */
-//    write_lock_irqsave(&(this_event->wait_queue_lock), flags);
-    
+    /* Lock wait queue. */
+    spin_lock_irqsave(&(this_event->wait_queue.lock), flags);
     /* Get the number of processes waiting on this event. */
-    int processes_signaled = get_list_length(&(this_event->wait_queue.task_list));  
+    int processes_signaled = get_list_length(&(this_event->wait_queue.task_list));
+    /* Unlock wait queue. */
+    spin_unlock_irqrestore(&(this_event->wait_queue.lock), flags);
     
     /* Wake up tasks in the wait queue. */
     wake_up(&(this_event->wait_queue));
     
-    /*
-     * Since all tasks previously waiting on the queue have been waken up,
-     * we can release the lock.
-     */
-//    write_unlock_irqrestore(&(this_event->wait_queue_lock), flags);
-
 
     return processes_signaled;
 }
@@ -452,7 +441,7 @@ asmlinkage long sys_doeventchown(int eventID, uid_t UID, gid_t GID)
 
 
     /* Check accessibility. */
-    uid_t uid = current->real_cred->uid;
+    uid_t uid = current->cred->uid;
     if (uid != 0 && uid != this_event->UID) {
         printk("sys_doeventchown(): access denied\n");
         return -1;
@@ -506,7 +495,7 @@ asmlinkage long sys_doeventchmod(int eventID, int UIDFlag, int GIDFlag)
     }
 
     /* Check accessibility. */
-    uid_t uid = current->real_cred->uid;
+    uid_t uid = current->cred->uid;
     if (uid != 0 && uid != this_event->UID) {
         printk("sys_doeventchmod(): access denied\n");
         return -1;
