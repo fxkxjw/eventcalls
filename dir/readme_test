@@ -1,7 +1,7 @@
 	Machine problem 3: Test
 	Test programs from t1.c to t5.c are created for basic test of the doevent system call that is the first version without access control. Test programs from t6.c to t9.c are added later to accomplish the entire function test. The state.c program uses the system call added in MP2 to find the state of the task with given pid. 
  	
-	state.c : Find the stadus of the process with given pid.
+	state.c : Find the stadus of the process with given pid: syscall(299).
 
 	t1.c : Using system call 181 (doeventopen) to create event, print its eventID, then wait on it.
 
@@ -22,14 +22,22 @@
 	t7.c : create process with given uid, gid, target eventID and the command type. 
 		Input example: ./t7 uid gid eventID syscall_number
 		syscall_number: 183: wait
-			184: signal
-			182: close
+				184: signal
+				182: close
 
 	t8.c : create process with given uid, target eventID and the UID & GID of the event to be changed to.
 		Input example: ./t8 uid eventID UID GID
 	
 	t9.c : create process with given uid, target eventID and the UIDFlag & GIDFlag of the event to be changed to.
 		Input example: ./t9 uid eid UIDFlag GIDFlag
+
+	Test results: A process with an effective UID equal to 0 can signal or wait on or close any event, can also modify the UID, GID, User Signal Enable Bit and Group Signal Enable Bit of any event. 
+	A process with the an effective UID equal to the UID of an event can signal or wait on or close this event if the User Signal Enable Bit of the event is equal to 1. This process can also modify the UID, GID, User Signal Enable Bit, and Group Signal Enable Bit.
+	A process with the an effective GID equal to the GID of an event can signal or wait on or close this event if the Group Signal Bit is equal to 1.
+	If no tasks waiting when doeventsig() is called, then there is nothing happened.
+	If multiple tasks waiting when doeventsig() is called then all tasks would be waked up and the waiting list would be cleared.
+	The functions work well if multiple events open at one time.
+	While processes waiting when doeventclose() is called, then all waiting processes will be waked up and the event will be closed. 
 
 	system call 181: doeventopen.
 	system call 182: doeventclose.
@@ -38,3 +46,4 @@
 	system call 205: doeventchown.
 	system call 211: doeventchmod.
 	system call 214: doeventstat.
+	system call 299: prinfo.
